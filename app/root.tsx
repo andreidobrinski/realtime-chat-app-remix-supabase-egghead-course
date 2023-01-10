@@ -7,6 +7,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useFetcher,
   useLoaderData,
 } from "@remix-run/react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -46,15 +47,31 @@ export const loader = async ({ request }: LoaderArgs) => {
 
 export default function App() {
   const { env, session } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher();
 
   const [supabase] = useState(() => createBrowserClient<Database>(
     env.SUPABASE_URL,
     env.SUPABASE_ANON_KEY
   ));
 
+  const serverAccessToken = session?.access_token;
+
   useEffect(() => {
-    supabase.auth.getSession().then(session => console.log({ client: {session}}))
-  }, [])
+    const { data: {
+      subscription
+    }} = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.access_token !== serverAccessToken) {
+        fetcher.submit(null, {
+          method: 'post',
+          action: '/handle-supabase-auth'
+        })
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [serverAccessToken, supabase, fetcher]);
 
   return (
     <html lang="en">
